@@ -24,7 +24,7 @@ std::vector<float> BlockGemmOMP(const std::vector<float>& a,
                     for(int k = kk; k < k_end; k++){
                         float a_tmp = a_str[k];
                         const float * b_str = b_ptr + k*n;
-                        #pragma omp simd aligned(result_str, b_str: block)
+                        #pragma omp simd 
                         for(int j = jj; j < j_end ; j++){
                             result_str[j]+=a_tmp*b_str[j];
                             //result[i*n+j]+=a_tmp*b[k*n+j];
