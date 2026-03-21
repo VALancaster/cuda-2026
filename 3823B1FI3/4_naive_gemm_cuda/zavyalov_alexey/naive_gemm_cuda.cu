@@ -1,8 +1,9 @@
 #include "naive_gemm_cuda.h"
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 128
 
 #pragma GCC optimize("O3,fast-math,unroll-loops")
 #pragma GCC target("fma,avx2")
+
 
 __global__ void gelu_kernel(const float* a, const float* b, float* result, int i, int n) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -11,12 +12,13 @@ __global__ void gelu_kernel(const float* a, const float* b, float* result, int i
         for (int k = 0; k < n; k++) {
             local_res += a[i * n + k] * b[k * n + j];
         }
+
     result[i * n + j] = local_res;
 }
 
 std::vector<float> NaiveGemmCUDA(const std::vector<float>& a, const std::vector<float>& b, int n) {
     std::vector<float> res(n*n);
-    // const int block_size = 128;
+    
     int num_blocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
     
     static float *a_gpu_first_half = nullptr, *b_gpu = nullptr, *result_gpu_first_half = nullptr;
@@ -28,20 +30,24 @@ std::vector<float> NaiveGemmCUDA(const std::vector<float>& a, const std::vector<
     if (device_capacity != n * n) {
         if (device_capacity > 0) {
             cudaFree(a_gpu_first_half);
+            cudaFree(a_gpu_second_half);
             cudaFree(b_gpu);
             cudaFree(result_gpu_first_half);
+            cudaFree(result_gpu_second_half);
         }
-        cudaMalloc(&a_gpu_first_half, n * n * sizeof(float));
+        cudaMalloc(&a_gpu_first_half, n * n / 2 * sizeof(float));
+        cudaMalloc(&a_gpu_second_half, n * n / 2 * sizeof(float));
         cudaMalloc(&b_gpu, n * n * sizeof(float));
-        cudaMalloc(&result_gpu_first_half, n * n * sizeof(float));
+        cudaMalloc(&result_gpu_first_half, n * n / 2 * sizeof(float));
+        cudaMalloc(&result_gpu_second_half, n * n / 2 * sizeof(float));
         device_capacity = n * n;
     }
 
     cudaMemcpy(a_gpu_first_half, a.data(), n * n / 2 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(b_gpu, a.data(), n * n * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(b_gpu, b.data(), n * n * sizeof(float), cudaMemcpyHostToDevice);
     //cudaMemcpy(b_gpu_first_half, b.data(), n * n / 2 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemset(result_gpu_first_half, 0, n * n / 2);
-    cudaMemset(result_gpu_second_half, 0, n * n / 2);
+    cudaMemset(result_gpu_first_half, 0, n * n / 2 * sizeof(float));
+    cudaMemset(result_gpu_second_half, 0, n * n / 2 * sizeof(float));
 
     cudaStream_t strm;
     cudaStreamCreate(&strm);
@@ -56,7 +62,7 @@ std::vector<float> NaiveGemmCUDA(const std::vector<float>& a, const std::vector<
 
     cudaStreamSynchronize(strm);
 
-    for (int i = n / 2; i < n; i++) {
+    for (int i = 0; i < n / 2; i++) {
         gelu_kernel<<<num_blocks, BLOCK_SIZE>>>(a_gpu_second_half, b_gpu, result_gpu_second_half, i, n);
     }
 
