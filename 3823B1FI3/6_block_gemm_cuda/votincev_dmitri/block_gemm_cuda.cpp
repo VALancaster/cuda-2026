@@ -18,8 +18,8 @@ __global__ void BlockGemmCUDA_kernel(
 
     // шарная память в рамках блока, блок размера BLOCK_SIZE^2
     // значит столько и шарная, чтобы каждый поток взял свою "ячейку"
-    __shared__ float a_shared[BLOCK_SIZE*BLOCK_SIZE];
-    __shared__ float b_shared[BLOCK_SIZE*BLOCK_SIZE];
+    __shared__ float a_shared[BLOCK_SIZE * BLOCK_SIZE];
+    __shared__ float b_shared[BLOCK_SIZE * BLOCK_SIZE];
 
     // каждый поток отвечает за свою ячейку в res: (row,col)
     int row = blockDim.y * blockIdx.y + threadIdx.y;
@@ -34,8 +34,8 @@ __global__ void BlockGemmCUDA_kernel(
     // шарная память -  линейный массив
     // надо "спроецировать" чтобы был блок (матрица)
     // для этого индекс делаю 2-мерным
-    int shared_idx = threadIdx.y*BLOCK_SIZE+threadIdx.x;
-    
+    int shared_idx = threadIdx.y * BLOCK_SIZE + threadIdx.x;
+
     // в это же время - a - это тоже не матрица, а линейный массив
     // поэтому проецируем тоже его как бы в 2-мерный
     int a_glob_idx = row * n + threadIdx.x;
@@ -45,20 +45,25 @@ __global__ void BlockGemmCUDA_kernel(
     int tile_count = n / BLOCK_SIZE;
 
     float sum_res = 0.0f;
-    
+
     for (int tile_idx = 0; tile_idx < tile_count; tile_idx++) {
 
         // тайл (окно) движется "слева-направо"
         int offset = tile_idx * BLOCK_SIZE;
 
-        a_shared[shared_idx] = a[a_glob_idx+offset];
-        b_shared[shared_idx] = b[b_glob_idx + offset*n];
+        a_shared[shared_idx] = a[a_glob_idx + offset];
+        b_shared[shared_idx] = b[b_glob_idx + offset * n];
 
         __syncthreads();
 
         // теперь нужно умножить часть строки матрицы A на часть столбца B
-        for (int k = 0; k < BLOCK_SIZE; k++) {
-            sum_res += a_shared[threadIdx.y*BLOCK_SIZE+k] * b_shared[BLOCK_SIZE*k+threadIdx.x];
+        // + оптимизация (loop unroll)
+
+        for (int k = 0; k < BLOCK_SIZE / 4; k++) {
+            sum_res += a_shared[threadIdx.y * BLOCK_SIZE + k] * b_shared[BLOCK_SIZE * (k + 1) + threadIdx.x];
+            sum_res += a_shared[threadIdx.y * BLOCK_SIZE + k + 1] * b_shared[BLOCK_SIZE * (k + 2) + threadIdx.x];
+            sum_res += a_shared[threadIdx.y * BLOCK_SIZE + k + 2] * b_shared[BLOCK_SIZE * (k + 3) + threadIdx.x];
+            sum_res += a_shared[threadIdx.y * BLOCK_SIZE + k + 3] * b_shared[BLOCK_SIZE * (k + 4) + threadIdx.x];
         }
 
         __syncthreads();
@@ -67,7 +72,7 @@ __global__ void BlockGemmCUDA_kernel(
     // теперь все потоки содержат в sum_res свою ячейку 
     // результата умножения матрицы A на B
     // надо только собрать в res
-    
+
     // res - тоже линейный массив, его проекцируем на матрицу
 
     res[row * n + col] = sum_res;
@@ -85,7 +90,7 @@ std::vector<float> BlockGemmCUDA(const std::vector<float>& a,
 
     std::vector<float> answer(n * n, 0.0f);
 
-    
+
 
     float* a_gpu;
     cudaMalloc((void**)&a_gpu, n * n * sizeof(float));
@@ -96,7 +101,7 @@ std::vector<float> BlockGemmCUDA(const std::vector<float>& a,
     cudaMemcpy(b_gpu, &b[0], n * n * sizeof(float), cudaMemcpyHostToDevice);
 
     float* answer_gpu;
-    cudaMalloc((void**)&answer_gpu, n*n * sizeof(float));
+    cudaMalloc((void**)&answer_gpu, n * n * sizeof(float));
 
     // каждый поток будет умножать одну строку матрицы a на один столбец матрицы b
     // я уже выделил память на a_gpu и b_gpu
@@ -114,8 +119,8 @@ std::vector<float> BlockGemmCUDA(const std::vector<float>& a,
     // поэтому лучше и сетку сделать 2D и сами блоки 2D
     // тогда пространство потоков будет как бы ложиться на матрицу
     // и каждый поток будет лежать на элементе, который считает
-   
-    
+
+
     dim3 block(BLOCK_SIZE, BLOCK_SIZE);
 
     // округление вверх для некратных размеров
@@ -132,7 +137,7 @@ std::vector<float> BlockGemmCUDA(const std::vector<float>& a,
 
 
     cudaDeviceSynchronize();
-    cudaMemcpy(&answer[0], answer_gpu, n*n * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&answer[0], answer_gpu, n * n * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaFree(a_gpu);
     cudaFree(b_gpu);
@@ -140,6 +145,8 @@ std::vector<float> BlockGemmCUDA(const std::vector<float>& a,
 
     return answer;
 }
+
+
 
 
 
