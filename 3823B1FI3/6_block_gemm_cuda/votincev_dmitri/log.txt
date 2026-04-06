@@ -1,1 +1,1 @@
-Source file /home/crazyproger/sandbox/cuda-2026/3823B1FI3/6_block_gemm_cuda/votincev_dmitri/block_gemm_cuda.cu not found
+Incorrect results, test input_128_1.bin, difference 0.5522361824718834
