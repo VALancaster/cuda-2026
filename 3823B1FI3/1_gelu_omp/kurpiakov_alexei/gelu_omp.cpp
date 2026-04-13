@@ -1,32 +1,30 @@
-#include "gelu_omp.h"
+#pragma GCC optimize("Ofast")
+#pragma GCC optimize("unroll-loops")
 
+
+#include "gelu_omp.h"
+#include <cmath>
 #include <omp.h>
 #include <vector>
-#include <cmath>
 
-#define C1 1.595769122f
-#define C2 0.044715f
+static constexpr float C1 = 1.59576912f; 
+static constexpr float C2 = 0.044715f;
 
-#pragma GCC optimize("Ofast,unroll-loops")
-#pragma GCC target("avx2")
+#pragma GCC target("avx", "avx2", "fma")
 std::vector<float> GeluOMP(const std::vector<float>& input) {
-    int _size = input.size();
-    float x;
-    float _exp;
-    float tmp;
+    size_t n = input.size();
+    std::vector<float> output(n);
 
-    std::vector<float> result(_size);
-
-    const float* input_ptr = input.data();
-    float* result_ptr = result.data();
 
 #pragma omp parallel for simd schedule(static)
-    for (int i = 0; i < _size; ++i) {
-        x = input_ptr[i];
-        _exp = std::exp2f(-(x * C1 * (1.0f + C2 * x * x)));
-        tmp = x / (_exp + 1.0f);
-        result_ptr[i] = tmp;
+    for (int i = 0; i < (int)n; ++i) {
+        float x = input[i];
+        float x2 = x * x ;
+        float x3 = x * x2
+        float arg = C1 * (x + C2 * x3);
+
+        output[i] = x / (1.0f + std::exp(-arg)); 
     }
 
-    return result;  
+    return output;
 }
