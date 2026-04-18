@@ -1,0 +1,4 @@
+/home/crazyproger/sandbox/cuda-2026/3823B1FI3/5_block_gemm_omp/kurpiakov_aleksei/block_gemm_omp.cpp:4:10: fatal error: block_gemm_cuda.h: No such file or directory
+    4 | #include "block_gemm_cuda.h"
+      |          ^~~~~~~~~~~~~~~~~~~
+compilation terminated.
